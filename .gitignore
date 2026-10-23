@@ -1,0 +1,4 @@
+work/
+dist/
+*.jks
+__pycache__/
