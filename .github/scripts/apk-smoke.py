@@ -2,6 +2,7 @@
 """Launch the actual packaged APK after instrumentation to check R8 and startup."""
 from pathlib import Path
 import subprocess
+import re
 import time
 import xml.etree.ElementTree as ET
 
@@ -31,5 +32,23 @@ else:
     (out / 'installed-page.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     raise AssertionError('Packaged APK did not load applications: ' + repr(sorted(texts)))
 assert adb('shell', 'pidof', PACKAGE).strip(), 'Packaged app exited'
+time.sleep(1)
 (out / 'installed-page.png').write_bytes(adb('exec-out', 'screencap', '-p'))
-print('Packaged APK launched and loaded installed applications')
+
+def app_rows(tree):
+    rows = []
+    for node in tree.iter('node'):
+        bounds = [int(n) for n in re.findall(r'\d+', node.get('bounds', ''))]
+        if node.get('checkable') == 'true' and len(bounds) == 4 and bounds[2] - bounds[0] > 500:
+            rows.append((node, bounds))
+    return rows
+
+row, bounds = app_rows(ET.fromstring(xml))[0]
+before = row.get('checked')
+adb('shell', 'input', 'tap', str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
+time.sleep(1)
+adb('shell', 'uiautomator', 'dump', '/sdcard/selection.xml')
+toggled = adb('shell', 'cat', '/sdcard/selection.xml')
+assert app_rows(ET.fromstring(toggled))[0][0].get('checked') != before, 'Packaged app did not toggle the selection'
+(out / 'installed-toggled.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+print('Packaged APK launched, loaded applications and toggled a selection')
