@@ -33,8 +33,8 @@ with zipfile.ZipFile(apk) as z:
     for n in z.namelist():
         if re.fullmatch(r'classes\d*\.dex', n):
             d = z.read(n)
-            sc, so = struct.unpack_from('<II', d, 56)
-            tc, to = struct.unpack_from('<II', d, 64)
+            _, so = struct.unpack_from('<II', d, 56)
+            _, to = struct.unpack_from('<II', d, 64)
             cc, co = struct.unpack_from('<II', d, 96)
             def text(i):
                 at = struct.unpack_from('<I', d, so + i * 4)[0]
@@ -63,7 +63,7 @@ proof = {'version': version, 'versionCode': element['versionCode'], 'variant': v
          'apk_size_bytes': apk.stat().st_size, 'dex_size_bytes': dex_bytes,
          'dex_packaged_bytes': dex_packaged_bytes,
          'sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
-         'real_oppo_cast_tested': False, 'published': False}
+         'real_oppo_cast_tested': False}
 proof_file = dist / (stem + '-build.json')
 proof_file.write_text(json.dumps(proof, ensure_ascii=False, indent=2), encoding='utf8')
 paths = run(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).splitlines()

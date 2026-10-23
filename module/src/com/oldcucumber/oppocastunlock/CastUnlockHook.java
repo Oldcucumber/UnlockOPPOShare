@@ -5,19 +5,17 @@ package com.oldcucumber.oppocastunlock;
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ContentResolver;
 import android.database.ContentObserver;
 import android.database.Cursor;
-import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,17 +35,13 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile Context context;
     private volatile SelectionPolicy policy = SelectionPolicy.defaults();
-    private volatile List<String> userApps = Collections.emptyList();
-    private volatile long lastScan;
     private ClassLoader loader;
-    private Handler handler;
-    private Runnable reload;
 
     private static final class Manager {
         final Class<?> type;
         volatile List<String> original = Collections.emptyList();
-        volatile Object published;
-        volatile List<String> reported;
+        boolean ready;
+        List<String> reported;
         Manager(Class<?> type) { this.type = type; }
     }
     private static final class PublishedApps extends ArrayList<String> {
@@ -63,7 +57,7 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
             @Override protected void afterHookedMethod(MethodHookParam p) {
                 Context c = (Context) p.args[0];
                 if (c != null && TARGET.equals(c.getPackageName())) {
-                    initialize(c); refreshApps(true); publishAll();
+                    initialize(c); publishAll();
                 }
             }
         });
@@ -71,20 +65,23 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
             XposedHelpers.findAndHookMethod(FINDER, loader, "getAllWhiteApps", Context.class, boolean.class,
                 new XC_MethodHook() {
                     @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        initialize((Context) p.args[0]); refreshApps(false); publishAll();
+                        initialize((Context) p.args[0]); publishAll();
                         if (rebuildApps.getAndSet(false)) p.args[1] = true;
                     }
                     @Override protected void afterHookedMethod(MethodHookParam p) {
                         if (p.hasThrowable()) rebuildApps.set(true);
-                    }
-                });
-            XposedHelpers.findAndHookMethod(TARGET + ".mac.client.data.source.PackageChangeReceiver", loader,
-                "onReceive", Context.class, Intent.class, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        initialize((Context) p.args[0]); refreshApps(true); publishAll();
+                        else pruneCache(p.thisObject);
                     }
                 });
         } catch (Throwable error) { log("Cache hook: " + error); }
+        try {
+            XposedHelpers.findAndHookMethod(TARGET + ".mac.client.data.source.PackageChangeReceiver", loader,
+                "onReceive", Context.class, Intent.class, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        initialize((Context) p.args[0]); rebuildApps.set(true); publishAll();
+                    }
+                });
+        } catch (Throwable error) { log("Package hook: " + error); }
         log("Loaded " + load.processName);
     }
 
@@ -97,9 +94,7 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
             XposedHelpers.findAndHookMethod(type, "getMirageAppList", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     if (p.hasThrowable()) return;
-                    refreshApps(false);
-                    capture(state, p.getResult());
-                    p.setResult(publish(state));
+                    p.setResult(publish(state, false));
                 }
             });
             for (Method method : type.getDeclaredMethods()) {
@@ -107,8 +102,7 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
                     XposedBridge.hookMethod(method, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam p) {
                             if (p.hasThrowable()) return;
-                            capture(state, XposedHelpers.getStaticObjectField(type, "sMirageAppList"));
-                            publish(state); rebuildApps.set(true);
+                            publish(state, true); rebuildApps.set(true);
                         }
                     });
                 } else if (method.getName().equals("setMirageAppList") && method.getParameterTypes().length == 1
@@ -116,8 +110,7 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
                     XposedBridge.hookMethod(method, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam p) {
                             if (p.hasThrowable()) return;
-                            capture(state, XposedHelpers.getStaticObjectField(type, "sMirageAppList"));
-                            publish(state); rebuildApps.set(true);
+                            publish(state, true); rebuildApps.set(true);
                         }
                     });
                 }
@@ -130,14 +123,13 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
         context = supplied.getApplicationContext() != null ? supplied.getApplicationContext() : supplied;
         if (!observing.compareAndSet(false, true)) return;
         try {
-            handler = new Handler(Looper.getMainLooper());
-            reload = () -> worker.execute(() -> {
+            Handler handler = new Handler(Looper.getMainLooper());
+            Runnable reload = () -> worker.execute(() -> {
                 readPolicy(); publishAll(); rebuildApps.set(true);
                 try {
                     Class<?> finder = XposedHelpers.findClass(FINDER, loader);
                     Object instance = XposedHelpers.getStaticObjectField(finder, "INSTANCE");
                     XposedHelpers.callMethod(instance, "getAllWhiteApps", context, true);
-                    rebuildApps.set(false);
                 } catch (Throwable error) { log("Refresh list: " + error); }
             });
             context.getContentResolver().registerContentObserver(SelectionStore.URI, false, new ContentObserver(handler) {
@@ -156,45 +148,44 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
         } catch (Throwable error) { log("Read selection: " + error); }
     }
 
-    private synchronized void refreshApps(boolean force) {
-        Context c = context;
-        if (c == null) return;
-        long now = SystemClock.elapsedRealtime();
-        if (!force && lastScan != 0 && now - lastScan < 3000) return;
-        try {
-            ArrayList<String> next = new ArrayList<>();
-            for (ApplicationInfo info : c.getPackageManager().getInstalledApplications(0))
-                if ((info.flags & ApplicationInfo.FLAG_SYSTEM) == 0) next.add(info.packageName);
-            Collections.sort(next);
-            if (!next.equals(userApps)) { userApps = Collections.unmodifiableList(next); rebuildApps.set(true); }
-            lastScan = now;
-        } catch (Throwable error) { log("Enumerate apps: " + error); }
-    }
-
-    private void capture(Manager state, Object value) {
-        if (value instanceof PublishedApps || !(value instanceof Collection<?>)) return;
-        ArrayList<String> original = new ArrayList<>();
-        for (Object item : (Collection<?>) value) if (item instanceof String) original.add((String) item);
-        state.original = original;
-    }
-
-    private ArrayList<String> publish(Manager state) {
-        ArrayList<String> next = new PublishedApps(policy.apply(state.original, userApps));
-        XposedHelpers.setStaticObjectField(state.type, "sMirageAppList", next);
-        state.published = next;
-        if (MAIN.equals(state.type.getName()) && context != null && !state.original.equals(state.reported)) {
-            try {
-                Bundle extras = new Bundle(); extras.putStringArrayList("packages", new ArrayList<>(state.original));
-                context.getContentResolver().call(SelectionStore.URI, "baseline", null, extras);
-                state.reported = new ArrayList<>(state.original);
-            } catch (Throwable error) { log("Report list: " + error); }
+    private ArrayList<String> publish(Manager state, boolean sourceCommitted) {
+        synchronized (state) {
+            Object value = XposedHelpers.getStaticObjectField(state.type, "sMirageAppList");
+            if (!(value instanceof PublishedApps) && value instanceof Collection<?>) {
+                ArrayList<String> original = new ArrayList<>();
+                for (Object item : (Collection<?>) value) if (item instanceof String) original.add((String) item);
+                // An initial empty field does not establish that the built-in list is ready.
+                if (sourceCommitted || !original.isEmpty()) {
+                    state.original = Collections.unmodifiableList(original);
+                    state.ready = true;
+                }
+            }
+            ArrayList<String> next = new PublishedApps(policy.apply(state.original));
+            XposedHelpers.setStaticObjectField(state.type, "sMirageAppList", next);
+            if (state.ready && MAIN.equals(state.type.getName()) && context != null && !state.original.equals(state.reported)) {
+                try {
+                    Bundle extras = new Bundle(); extras.putStringArrayList("packages", new ArrayList<>(state.original));
+                    context.getContentResolver().call(SelectionStore.URI, "baseline", null, extras);
+                    state.reported = state.original;
+                } catch (Throwable error) { log("Report list: " + error); }
+            }
+            return next;
         }
-        return next;
     }
     private void publishAll() {
         for (Manager state : managers) try {
-            capture(state, XposedHelpers.getStaticObjectField(state.type, "sMirageAppList")); publish(state);
+            publish(state, false);
         } catch (Throwable error) { log("Update whitelist: " + error); }
+    }
+    @SuppressWarnings("unchecked")
+    private void pruneCache(Object finder) {
+        for (Manager state : managers) if (MAIN.equals(state.type.getName())) {
+            try {
+                Map<String, ?> cache = (Map<String, ?>) XposedHelpers.callMethod(finder, "getAllAppMap");
+                policy.pruneCache(cache, state.original);
+            } catch (Throwable error) { log("Filter cache: " + error); }
+            return;
+        }
     }
     private static void log(String message) { XposedBridge.log("[OPPOCastUnlock] " + message); }
 }

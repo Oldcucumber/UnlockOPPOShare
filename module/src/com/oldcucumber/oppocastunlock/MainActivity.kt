@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -46,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private val model: AppSelectionViewModel by viewModels()
@@ -86,7 +84,7 @@ enum class AppFilter(val title: String) { ALL("全部"), SHOWN("已显示"), HID
     var systemApps by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf(AppFilter.ALL) }
     var menu by remember { mutableStateOf(false) }
-    val visible: (AppEntry) -> Boolean = { state.policy.isVisible(it.packageName, it.userApp, state.baseline) }
+    val visible: (AppEntry) -> Boolean = { state.policy.isVisible(it.packageName, state.baseline) }
     val matches = remember(state.apps, state.policy, state.baseline, query, systemApps, filter) {
         state.apps.filter { app ->
             app.userApp != systemApps &&
@@ -124,10 +122,8 @@ enum class AppFilter(val title: String) { ALL("全部"), SHOWN("已显示"), HID
                 subtitle = { Text("选择在电脑上显示的应用") },
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    Box {
-                        IconButton(onClick = { scope.launch { listState.animateScrollToItem(0); appBarState.heightOffset = 0f } }) {
-                            Icon(Icons.Rounded.Search, "搜索应用")
-                        }
+                    IconButton(onClick = { scope.launch { listState.animateScrollToItem(0); appBarState.heightOffset = 0f } }) {
+                        Icon(Icons.Rounded.Search, "搜索应用")
                     }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "更多") }

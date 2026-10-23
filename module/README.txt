@@ -5,7 +5,8 @@ UnlockOPPOshare LSPosed 模块 v2.0.0
 在 LSPosed 中启用模块，作用域选择 OPPO 互联（com.oplus.linker），重启互联进程或手机。
 打开「UnlockOPPOshare」，搜索或拖动右侧字母索引找到应用，使用开关选择是否显示。
 上滑收起大标题，搜索和筛选随列表滚动；顶部搜索按钮可返回搜索框。
-默认显示全部用户应用和互联原有的系统应用，可筛选、批量选择或恢复默认。
+首次安装及「恢复默认」仅使用 OPPO 互联原始白名单；重置会清除手动添加和隐藏记录。
+原始名单在互联进程启动后同步。升级保留测试版已有选择。
 
 构建：JDK 21、Android SDK 36、build-tools 36.0.0、Python 3。
 运行 python module/build.py，或通过 GitHub Actions 构建。详细说明见仓库 README.md。

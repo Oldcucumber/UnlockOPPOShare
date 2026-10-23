@@ -20,7 +20,8 @@ class SelectionScreenTest {
     } + AppEntry("com.example.ticket", "12306", true, "#")
     private fun screen() {
         compose.setContent {
-            var state by remember { mutableStateOf(SelectionUiState(apps = apps, loading = false)) }
+            var state by remember { mutableStateOf(SelectionUiState(apps = apps, loading = false,
+                baseline = setOf("com.example.a"), policy = SelectionPolicy(apps.map { it.packageName }, emptyList()))) }
             CastTheme { SelectionScreen(state,
                 onToggle = { pkg, value -> state = state.copy(policy = state.policy.withVisible(pkg, value)) },
                 onBatch = { selected, value ->
@@ -58,6 +59,14 @@ class SelectionScreenTest {
         screen()
         compose.onNodeWithTag("search").performTextInput("微信")
         compose.onNodeWithTag("app:com.example.w").assertIsDisplayed()
+    }
+    @Test fun resetRestoresOnlyTheBuiltInSelection() {
+        screen()
+        compose.onNodeWithTag("app:com.example.a").performClick().assertIsOff()
+        compose.onNodeWithContentDescription("更多").performClick()
+        compose.onNodeWithText("恢复默认").performClick()
+        compose.onNodeWithTag("app:com.example.a").assertIsOn()
+        compose.onNodeWithTag("app:com.example.b").assertIsOff()
     }
     @Test fun scrollingExpandsListAndSearchReturnsToTop() {
         screen()

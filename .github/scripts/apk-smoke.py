@@ -13,13 +13,20 @@ apk, = Path('work/built-apk').glob('*.apk')
 def adb(*args):
     return subprocess.check_output(['adb', *args], timeout=30)
 
+def snapshot():
+    adb('shell', 'uiautomator', 'dump', '/sdcard/selection.xml')
+    return adb('shell', 'cat', '/sdcard/selection.xml')
+
+def tap(node):
+    left, top, right, bottom = [int(n) for n in re.findall(r'\d+', node.get('bounds'))]
+    adb('shell', 'input', 'tap', str((left + right) // 2), str((top + bottom) // 2))
+
 subprocess.run(['adb', 'uninstall', PACKAGE], capture_output=True, timeout=30)
 adb('install', str(apk))
 adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity')
 for _ in range(12):
     time.sleep(1)
-    adb('shell', 'uiautomator', 'dump', '/sdcard/selection.xml')
-    xml = adb('shell', 'cat', '/sdcard/selection.xml')
+    xml = snapshot()
     nodes = list(ET.fromstring(xml).iter('node'))
     texts = {node.get('text') for node in nodes}
     (out / 'installed-page.xml').write_bytes(xml)
@@ -47,8 +54,14 @@ row, bounds = app_rows(ET.fromstring(xml))[0]
 before = row.get('checked')
 adb('shell', 'input', 'tap', str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
 time.sleep(1)
-adb('shell', 'uiautomator', 'dump', '/sdcard/selection.xml')
-toggled = adb('shell', 'cat', '/sdcard/selection.xml')
+toggled = snapshot()
 assert app_rows(ET.fromstring(toggled))[0][0].get('checked') != before, 'Packaged app did not toggle the selection'
 (out / 'installed-toggled.png').write_bytes(adb('exec-out', 'screencap', '-p'))
-print('Packaged APK launched, loaded applications and toggled a selection')
+tap(next(n for n in ET.fromstring(toggled).iter('node') if n.get('content-desc') == '更多'))
+menu = ET.fromstring(snapshot())
+tap(next(n for n in menu.iter('node') if n.get('text') == '恢复默认'))
+time.sleep(1)
+reset = snapshot()
+assert all(n.get('checked') == 'false' for n, _ in app_rows(ET.fromstring(reset))), 'Reset retained extra applications'
+(out / 'installed-reset.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+print('Packaged APK launched, toggled an application and restored the built-in list')

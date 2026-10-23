@@ -37,7 +37,7 @@ class AppSelectionViewModel(application: Application) : AndroidViewModel(applica
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) { mutable.update { it.copy(baseline = store.baseline()) } }
     }
-    init { application.contentResolver.registerContentObserver(SelectionStore.URI, false, observer); load() }
+    init { application.contentResolver.registerContentObserver(SelectionStore.URI, false, observer) }
 
     fun load() {
         if (loading) return
@@ -81,7 +81,10 @@ class AppSelectionViewModel(application: Application) : AndroidViewModel(applica
         mutable.update { it.copy(policy = next) }
         viewModelScope.launch {
             try { writes.withLock { withContext(Dispatchers.IO) { store.write(next) } } }
-            catch (_: Exception) { mutable.update { it.copy(error = "保存失败，请重试") } }
+            catch (_: Exception) {
+                val persisted = withContext(Dispatchers.IO) { store.read() }
+                mutable.update { it.copy(policy = if (it.policy === next) persisted else it.policy, error = "保存失败，请重试") }
+            }
         }
     }
     override fun onCleared() { getApplication<Application>().contentResolver.unregisterContentObserver(observer) }

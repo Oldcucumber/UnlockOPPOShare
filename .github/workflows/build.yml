@@ -63,6 +63,7 @@ jobs:
             module/build/reports/tests/
             module/build/test-results/
             module/build/reports/lint-results-debug.*
+            module/build/outputs/mapping/release/
           if-no-files-found: ignore
   ui-tests:
     needs: build
