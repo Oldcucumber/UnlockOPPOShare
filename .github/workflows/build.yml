@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: OPPO-Cast-Unlock-${{ github.run_number }}
-          path: dist/OPPO-Cast-Unlock-LSPosed-v2.0.0*
+          path: dist/OPPO-Cast-Unlock-LSPosed-v*
           if-no-files-found: error
           retention-days: 30
       - name: Test reports

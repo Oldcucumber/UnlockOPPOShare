@@ -131,7 +131,8 @@ enum class AppFilter(val title: String) { ALL("全部"), SHOWN("已显示"), HID
                     color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Spacer(Modifier.width(14.dp))
                 Column {
-                    Text("个应用已显示", style = MaterialTheme.typography.titleMedium)
+                    Text("个应用已显示", style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text("更改自动保存", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .72f))
                 }
@@ -180,22 +181,24 @@ enum class AppFilter(val title: String) { ALL("全部"), SHOWN("已显示"), HID
 }
 
 @Composable private fun AppRow(app: AppEntry, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    val contentColor = if (checked) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-        .background(if (checked) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f) else MaterialTheme.colorScheme.surfaceContainerLow)
+        .background(if (checked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow)
         .toggleable(checked, role = Role.Switch, onValueChange = onToggle).testTag("app:${app.packageName}")
         .padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         if (app.icon != null) Image(app.icon, null, Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)))
         else Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.tertiaryContainer),
-            contentAlignment = Alignment.Center) { Text(app.initial, fontWeight = FontWeight.Bold) }
+            contentAlignment = Alignment.Center) { Text(app.initial, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(app.label, style = MaterialTheme.typography.titleMedium, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = contentColor.copy(alpha = .78f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Switch(checked, onCheckedChange = null,
-            thumbContent = if (checked) { { Icon(Icons.Rounded.Check, null, Modifier.size(16.dp)) } } else null)
+            thumbContent = if (checked) { { Icon(Icons.Rounded.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) } } else null)
     }
 }
 

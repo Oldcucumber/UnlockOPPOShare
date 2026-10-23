@@ -12,7 +12,7 @@ folder = ROOT / 'module/build/outputs/apk' / variant
 metadata = json.loads((folder / 'output-metadata.json').read_text('utf8'))
 element = metadata['elements'][0]
 version = element['versionName']
-assert version == '2.0.0'
+assert re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?', version), 'Invalid version name'
 sdk = Path(os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME')
            or (Path(os.environ['LOCALAPPDATA']) / 'Android/Sdk' if os.name == 'nt' else Path.home() / 'Android/Sdk'))
 tools = sdk / 'build-tools/36.0.0'
