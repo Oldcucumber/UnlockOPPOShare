@@ -59,11 +59,32 @@ class SelectionScreenTest {
         compose.onNodeWithTag("search").performTextInput("微信")
         compose.onNodeWithTag("app:com.example.w").assertIsDisplayed()
     }
+    @Test fun scrollingExpandsListAndSearchReturnsToTop() {
+        screen()
+        val initialTop = compose.onNodeWithTag("app-list").fetchSemanticsNode().boundsInRoot.top
+        repeat(2) { compose.onNodeWithTag("app-list").performTouchInput { swipeUp() } }
+        compose.waitForIdle()
+        compose.onNodeWithTag("list-controls").assertIsNotDisplayed()
+        val list = compose.onNodeWithTag("app-list").fetchSemanticsNode().boundsInRoot
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue("The large app bar must collapse", list.top < initialTop - 40)
+        assertTrue("The list must use most of the screen", list.height > root.height * .80f)
+        saveScreenshot("selection-scrolled")
+        compose.onNodeWithContentDescription("搜索应用").performClick()
+        compose.onNodeWithTag("search").assertIsDisplayed()
+        compose.onNodeWithTag("app:com.example.a").assertIsDisplayed()
+    }
     @Test fun screenshot() {
-        screen(); compose.waitForIdle()
+        screen()
+        compose.onNodeWithText("UnlockOPPOshare").assertIsDisplayed()
+        compose.onNodeWithText("更改自动保存").assertDoesNotExist()
+        saveScreenshot("selection-page")
+    }
+    private fun saveScreenshot(name: String) {
+        compose.waitForIdle()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val folder = File(context.getExternalFilesDir(null), "test-screenshots").apply { mkdirs() }
-        File(folder, "selection-page.png").outputStream().use {
+        File(folder, "$name.png").outputStream().use {
             compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
     }

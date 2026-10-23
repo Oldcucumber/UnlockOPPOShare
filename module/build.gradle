@@ -34,13 +34,21 @@ android {
         }
     }
     buildTypes {
-        release { minifyEnabled false; if (signingConfigs.findByName('moduleRelease')) signingConfig signingConfigs.moduleRelease }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (signingConfigs.findByName('moduleRelease')) signingConfig signingConfigs.moduleRelease
+        }
         debug { if (signingConfigs.findByName('moduleRelease')) signingConfig signingConfigs.moduleRelease }
     }
     buildFeatures { compose true; buildConfig true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
-    packaging { resources.excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1'] }
+    packaging {
+        dex { useLegacyPackaging true }
+        resources.excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
+    }
     lint { abortOnError true }
 }
 

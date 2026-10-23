@@ -50,8 +50,8 @@ jobs:
       - name: Build artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: OPPO-Cast-Unlock-${{ github.run_number }}
-          path: dist/OPPO-Cast-Unlock-LSPosed-v*
+          name: UnlockOPPOshare-${{ github.run_number }}
+          path: dist/UnlockOPPOshare-v*
           if-no-files-found: error
           retention-days: 30
       - name: Test reports
@@ -80,6 +80,10 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: KVM
         run: sudo chmod 666 /dev/kvm
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: UnlockOPPOshare-${{ github.run_number }}
+          path: work/built-apk
       - name: UI and settings tests
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:

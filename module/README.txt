@@ -1,9 +1,10 @@
-OPPO 互联投屏应用 LSPosed 模块 v2.0.0
+UnlockOPPOshare LSPosed 模块 v2.0.0
 作者：Old_cucumber
 包名：com.oldcucumber.oppocastunlock
 
 在 LSPosed 中启用模块，作用域选择 OPPO 互联（com.oplus.linker），重启互联进程或手机。
-打开「投屏应用」，搜索或拖动右侧字母索引找到应用，使用开关选择是否显示。更改自动保存。
+打开「UnlockOPPOshare」，搜索或拖动右侧字母索引找到应用，使用开关选择是否显示。
+上滑收起大标题，搜索和筛选随列表滚动；顶部搜索按钮可返回搜索框。
 默认显示全部用户应用和互联原有的系统应用，可筛选、批量选择或恢复默认。
 
 构建：JDK 21、Android SDK 36、build-tools 36.0.0、Python 3。

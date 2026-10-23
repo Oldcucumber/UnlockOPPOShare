@@ -33,8 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -96,20 +98,37 @@ enum class AppFilter(val title: String) { ALL("全部"), SHOWN("已显示"), HID
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val appBarState = rememberTopAppBarState()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(appBarState)
+    val density = LocalDensity.current
+    // The index follows the app rows as the controls scroll out of the viewport.
+    val railTop by remember {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "controls" }
+                ?.let { (it.offset + it.size).coerceAtLeast(0) } ?: 0
+        }
+    }
     val headerIndexes = remember(groups) {
-        var index = 0
+        var index = 1 // The controls occupy the first lazy item.
         groups.mapValues { (_, apps) -> val header = index; index += apps.size + 1; header }
     }
-    LaunchedEffect(query, filter, systemApps) { listState.scrollToItem(0) }
+    LaunchedEffect(query, filter, systemApps) { listState.scrollToItem(0); appBarState.heightOffset = 0f }
     LaunchedEffect(state.error) { state.error?.let { snackbar.showSnackbar(it); onErrorShown() } }
     val count = state.apps.count { visible(it) }
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("投屏应用", fontWeight = FontWeight.Bold) },
+                title = { Text("UnlockOPPOshare", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 subtitle = { Text("选择在电脑上显示的应用") },
+                scrollBehavior = scrollBehavior,
                 actions = {
+                    Box {
+                        IconButton(onClick = { scope.launch { listState.animateScrollToItem(0); appBarState.heightOffset = 0f } }) {
+                            Icon(Icons.Rounded.Search, "搜索应用")
+                        }
+                    }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "更多") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -123,57 +142,66 @@ enum class AppFilter(val title: String) { ALL("全部"), SHOWN("已显示"), HID
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(32.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 24.dp, vertical = 18.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text("$count", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text("个应用已显示", style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("更改自动保存", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .72f))
-                }
-            }
-            OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp).testTag("search"),
-                placeholder = { Text("搜索应用") }, shape = RoundedCornerShape(28.dp),
-                leadingIcon = { Icon(Icons.Rounded.Search, null) },
-                trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, "清除搜索") } },
-            )
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppFilter.entries.forEach { value ->
-                    FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(value.title) })
-                }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { systemApps = !systemApps }) { Text(if (systemApps) "系统应用" else "用户应用") }
-            }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when {
-                    state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    matches.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(if (query.isBlank()) "暂无应用" else "没有找到应用", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("app-list"),
+                contentPadding = PaddingValues(bottom = 28.dp)) {
+                item(key = "controls", contentType = "controls") {
+                    Column(Modifier.testTag("list-controls")) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(32.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 24.dp, vertical = 18.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("$count", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Spacer(Modifier.width(14.dp))
+                            Text("个应用已显示", style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp).testTag("search"),
+                            placeholder = { Text("搜索应用") }, shape = RoundedCornerShape(28.dp),
+                            leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                            trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, "清除搜索") } },
+                        )
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AppFilter.entries.forEach { value ->
+                                FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(value.title) })
+                            }
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { systemApps = !systemApps }) { Text(if (systemApps) "系统应用" else "用户应用") }
+                        }
                     }
-                    else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(start = 20.dp, end = 44.dp).testTag("app-list"),
-                        contentPadding = PaddingValues(bottom = 28.dp)) {
+                }
+                when {
+                    state.loading -> item(key = "loading") {
+                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    }
+                    matches.isEmpty() -> item(key = "empty") {
+                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            Text(if (query.isBlank()) "暂无应用" else "没有找到应用", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    else -> {
                         groups.forEach { (letter, apps) ->
                             item(key = "header-$letter", contentType = "header") {
-                                Text(letter, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
+                                Text(letter, modifier = Modifier.padding(start = 36.dp, top = 16.dp, bottom = 8.dp),
                                     style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                             }
                             items(apps, key = { it.packageName }, contentType = { "app" }) { app ->
-                                AppRow(app, visible(app), { onToggle(app.packageName, it) })
-                                Spacer(Modifier.height(3.dp))
+                                Column(Modifier.padding(start = 20.dp, end = 44.dp)) {
+                                    AppRow(app, visible(app), { onToggle(app.packageName, it) })
+                                    Spacer(Modifier.height(3.dp))
+                                }
                             }
                         }
                     }
                 }
-                if (matches.isNotEmpty()) AlphabetRail(groups.keys, Modifier.align(Alignment.CenterEnd).padding(end = 4.dp)) { letter ->
+            }
+            if (matches.isNotEmpty()) Box(Modifier.fillMaxSize().padding(top = with(density) { railTop.toDp() }),
+                contentAlignment = Alignment.CenterEnd) {
+                AlphabetRail(groups.keys, Modifier.padding(end = 4.dp)) { letter ->
                     val target = headerIndexes[letter] ?: headerIndexes.entries.firstOrNull { it.key >= letter }?.value
-                    target?.let { scope.launch { listState.scrollToItem(it) } }
+                    target?.let { scope.launch { appBarState.heightOffset = appBarState.heightOffsetLimit; listState.scrollToItem(it) } }
                 }
             }
         }

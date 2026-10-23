@@ -46,15 +46,22 @@ with zipfile.ZipFile(apk) as z:
                 definitions.append(text(struct.unpack_from('<I', d, to + type_id * 4)[0]))
     assert 'Lcom/oldcucumber/oppocastunlock/CastUnlockHook;' in definitions
     assert not any(n.startswith('Lde/robv/android/xposed/') for n in definitions)
+    dex_entries = [n for n in z.infolist() if re.fullmatch(r'classes\d*\.dex', n.filename)]
+    dex_bytes = sum(n.file_size for n in dex_entries)
+    dex_packaged_bytes = sum(n.compress_size for n in dex_entries)
+if variant == 'release':
+    assert apk.stat().st_size <= 2 * 1024 * 1024, 'Release APK exceeds the 2 MiB size budget'
 
 dist = ROOT / 'dist'; dist.mkdir(exist_ok=True)
-stem = 'OPPO-Cast-Unlock-LSPosed-v' + version + ('-debug' if variant == 'debug' else '')
+stem = 'UnlockOPPOshare-v' + version + ('-debug' if variant == 'debug' else '')
 output = dist / (stem + '.apk'); output.write_bytes(apk.read_bytes())
 commit = run(['git', 'rev-parse', 'HEAD']).strip()
 proof = {'version': version, 'versionCode': element['versionCode'], 'variant': variant,
          'package': metadata['applicationId'], 'commit': commit, 'has_ui': True,
          'certificate_sha256': certificate, 'signature_verified': True,
          'zipalign_verified': True, 'xposed_stubs_bundled': False,
+         'apk_size_bytes': apk.stat().st_size, 'dex_size_bytes': dex_bytes,
+         'dex_packaged_bytes': dex_packaged_bytes,
          'sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
          'real_oppo_cast_tested': False, 'published': False}
 proof_file = dist / (stem + '-build.json')

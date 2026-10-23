@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-3.0-only
+"""Launch the actual packaged APK after instrumentation to check R8 and startup."""
+from pathlib import Path
+import subprocess
+import time
+import xml.etree.ElementTree as ET
+
+PACKAGE = 'com.oldcucumber.oppocastunlock'
+out = Path('work/ui-screenshots')
+apk, = Path('work/built-apk').glob('*.apk')
+
+def adb(*args):
+    return subprocess.check_output(['adb', *args], timeout=30)
+
+subprocess.run(['adb', 'uninstall', PACKAGE], capture_output=True, timeout=30)
+adb('install', str(apk))
+adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity')
+for _ in range(12):
+    time.sleep(1)
+    adb('shell', 'uiautomator', 'dump', '/sdcard/selection.xml')
+    xml = adb('shell', 'cat', '/sdcard/selection.xml')
+    nodes = list(ET.fromstring(xml).iter('node'))
+    texts = {node.get('text') for node in nodes}
+    if 'UnlockOPPOshare' in texts and '搜索应用' in texts and '个应用已显示' in texts:
+        assert '应用加载失败' not in texts
+        assert any(node.get('class') == 'android.widget.Switch' for node in nodes), 'No installed applications loaded'
+        break
+else:
+    raise AssertionError('Packaged APK did not load the selection screen')
+assert adb('shell', 'pidof', PACKAGE).strip(), 'Packaged app exited'
+(out / 'installed-page.xml').write_bytes(xml)
+(out / 'installed-page.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+print('Packaged APK launched and loaded installed applications')

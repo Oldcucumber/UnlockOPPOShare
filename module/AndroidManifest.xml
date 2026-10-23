@@ -4,7 +4,7 @@
     <!-- The picker includes installed apps without a launcher activity. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
     <queries><package android:name="com.oplus.linker" /></queries>
-    <application android:label="投屏应用" android:icon="@drawable/ic_launcher"
+    <application android:label="UnlockOPPOshare" android:icon="@drawable/ic_launcher"
         android:theme="@style/AppTheme" android:allowBackup="false" android:supportsRtl="true" android:hasCode="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
