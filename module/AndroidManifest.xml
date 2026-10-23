@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.oldcucumber.oppocastunlock"
-    android:versionCode="2" android:versionName="1.0.1">
-    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="36" />
-    <application android:label="OPPO互联全应用投屏"
-        android:allowBackup="false" android:hasCode="true">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"
+    >
+    <!-- The picker includes installed apps without a launcher activity. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <queries><package android:name="com.oplus.linker" /></queries>
+    <application android:label="投屏应用" android:icon="@drawable/ic_launcher"
+        android:theme="@style/AppTheme" android:allowBackup="false" android:supportsRtl="true" android:hasCode="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <provider android:name=".SelectionProvider" android:authorities="com.oldcucumber.oppocastunlock.selection"
+            android:exported="true" android:grantUriPermissions="false" />
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposedminversion" android:value="82" />
         <meta-data android:name="xposeddescription"
-            android:value="启用并勾选 OPPO 互联作用域，自动将所有用户应用加入投屏白名单。无界面、无配置文件修改。作者：Old_cucumber。" />
+            android:value="选择要显示的投屏应用。作者：Old_cucumber。" />
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
     </application>
 </manifest>

@@ -1,15 +1,16 @@
-OPPO互联全应用投屏 LSPosed 模块 v1.0.1
+OPPO 互联投屏应用 LSPosed 模块 v2.0.0
 作者：Old_cucumber
 包名：com.oldcucumber.oppocastunlock
 
-无 Activity、无启动图标、无 UI、无配置项。
-安装后在 LSPosed 中启用，勾选 OPPO 互联（com.oplus.linker），再重启互联进程或重启手机。
-自动合并当前用户的全部第三方应用到内存白名单，保留原有系统应用名单。
-覆盖列表读取、配置重载、白名单赋值以及应用列表缓存刷新；兼容旧 PCSynergy 名单路径。
-不修改 XML、不挂载、不改互联 APK。无需选择系统框架作用域。
-模块仅解除已定位的应用内白名单筛选；实际投屏效果由用户验证。
-日志在 LSPosed 模块日志中，前缀为 [OPPOCastUnlock]。
+在 LSPosed 中启用模块，作用域选择 OPPO 互联（com.oplus.linker），重启互联进程或手机。
+打开「投屏应用」，搜索或拖动右侧字母索引找到应用，使用开关选择是否显示。更改自动保存。
+默认显示全部用户应用和互联原有的系统应用，可筛选、批量选择或恢复默认。
 
-本次只进行编译、APK 结构和签名校验、安装确认。未进行投屏或运行时 Hook 效果测试。
-Xposed API 82 仅作为编译依赖，不打包进 APK。
-许可证：GPL-3.0-only；完整协议位于仓库根目录 LICENSE。
+构建：JDK 21、Android SDK 36、build-tools 36.0.0、Python 3。
+运行 python module/build.py，或通过 GitHub Actions 构建。详细说明见仓库 README.md。
+工作流上传 APK、源码、校验文件和测试报告，不自动发布 Release。
+
+Hook 只更改内存名单与应用缓存。真实 LSPosed 注入和投屏效果需实机验证。
+日志前缀：[OPPOCastUnlock]。
+Xposed API 82 仅编译使用，不打包进 APK。
+许可证：GPL-3.0-only，完整协议位于仓库根目录 LICENSE。

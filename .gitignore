@@ -3,3 +3,7 @@ dist/
 *.jks
 *.keystore
 __pycache__/
+.gradle/
+.kotlin/
+**/build/
+local.properties

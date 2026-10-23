@@ -1,0 +1,100 @@
+name: Android Build
+run-name: Android · ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OPPO_SIGNING_KEYSTORE }}
+        run: |
+          if [[ '${{ github.event_name }}' != 'pull_request' && -n "$KEYSTORE_BASE64" ]]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/module-signing.jks"
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/module-signing.jks" >> "$GITHUB_ENV"
+            echo 'APK_VARIANT=release' >> "$GITHUB_ENV"
+          else
+            echo 'APK_VARIANT=debug' >> "$GITHUB_ENV"
+          fi
+      - name: Test, lint and build
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.OPPO_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.OPPO_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.OPPO_SIGNING_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug "assemble${APK_VARIANT^}"
+      - name: Package
+        run: python3 module/package_artifacts.py --variant "$APK_VARIANT"
+      - name: Build artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: OPPO-Cast-Unlock-${{ github.run_number }}
+          path: dist/OPPO-Cast-Unlock-LSPosed-v2.0.0*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unit-and-lint-${{ github.run_number }}
+          path: |
+            module/build/reports/tests/
+            module/build/test-results/
+            module/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+  ui-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: UI and settings tests
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          script: bash .github/scripts/ui-tests.sh
+      - name: UI reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-tests-${{ github.run_number }}
+          path: |
+            module/build/reports/androidTests/
+            module/build/outputs/androidTest-results/
+            work/ui-screenshots/
+          if-no-files-found: ignore
