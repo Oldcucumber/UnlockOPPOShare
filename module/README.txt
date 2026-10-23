@@ -1,4 +1,4 @@
-UnlockOPPOshare LSPosed 模块 v2.0.0
+UnlockOPPOshare LSPosed 模块 v2.0.0-fix1
 作者：Old_cucumber
 包名：com.oldcucumber.oppocastunlock
 
@@ -7,6 +7,8 @@ UnlockOPPOshare LSPosed 模块 v2.0.0
 上滑收起大标题，搜索和筛选随列表滚动；顶部搜索按钮可返回搜索框。
 首次安装及「恢复默认」仅使用 OPPO 互联原始白名单；重置会清除手动添加和隐藏记录。
 原始名单在互联进程启动后同步。升级保留测试版已有选择。
+fix1：打开页面重新同步配置，读取失败短暂重试，缓存最后一次有效选择。
+首次同步时保持互联运行；若互联停止期间改了选择，恢复后打开本模块同步一次。
 
 构建：JDK 21、Android SDK 36、build-tools 36.0.0、Python 3。
 运行 python module/build.py，或通过 GitHub Actions 构建。详细说明见仓库 README.md。

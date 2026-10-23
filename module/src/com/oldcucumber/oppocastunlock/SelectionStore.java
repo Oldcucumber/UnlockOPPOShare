@@ -45,8 +45,10 @@ public final class SelectionStore {
         synchronized (prefs) {
             commit(prefs.edit().putStringSet("included", policy.included).putStringSet("excluded", policy.excluded));
         }
-        context.getContentResolver().notifyChange(URI, null);
+        refreshBridge();
     }
+    /** Reconnect observers after the module was stopped or its provider could not be started. */
+    public void refreshBridge() { context.getContentResolver().notifyChange(URI, null); }
     public void saveBaseline(Collection<String> baseline) {
         LinkedHashSet<String> next = new LinkedHashSet<>(baseline);
         synchronized (prefs) {

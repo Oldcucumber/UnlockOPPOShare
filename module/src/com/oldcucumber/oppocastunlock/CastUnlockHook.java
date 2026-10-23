@@ -8,8 +8,10 @@ import android.content.Intent;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.os.Bundle;
+import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -35,6 +37,10 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile Context context;
     private volatile SelectionPolicy policy = SelectionPolicy.defaults();
+    private SelectionCache cache;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable reload = () -> worker.execute(this::reloadSelection);
+    private int failedReads;
     private ClassLoader loader;
 
     private static final class Manager {
@@ -42,6 +48,8 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
         volatile List<String> original = Collections.emptyList();
         boolean ready;
         List<String> reported;
+        List<String> attempted;
+        long retryAfter;
         Manager(Class<?> type) { this.type = type; }
     }
     private static final class PublishedApps extends ArrayList<String> {
@@ -120,32 +128,57 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
 
     private void initialize(Context supplied) {
         if (supplied == null) return;
-        context = supplied.getApplicationContext() != null ? supplied.getApplicationContext() : supplied;
         if (!observing.compareAndSet(false, true)) return;
+        context = supplied.getApplicationContext() != null ? supplied.getApplicationContext() : supplied;
         try {
-            Handler handler = new Handler(Looper.getMainLooper());
-            Runnable reload = () -> worker.execute(() -> {
-                readPolicy(); publishAll(); rebuildApps.set(true);
-                try {
-                    Class<?> finder = XposedHelpers.findClass(FINDER, loader);
-                    Object instance = XposedHelpers.getStaticObjectField(finder, "INSTANCE");
-                    XposedHelpers.callMethod(instance, "getAllWhiteApps", context, true);
-                } catch (Throwable error) { log("Refresh list: " + error); }
-            });
+            cache = new SelectionCache(context.getSharedPreferences("oppo_cast_unlock", Context.MODE_PRIVATE));
+            policy = cache.read();
             context.getContentResolver().registerContentObserver(SelectionStore.URI, false, new ContentObserver(handler) {
                 @Override public void onChange(boolean selfChange) {
-                    handler.removeCallbacks(reload); handler.postDelayed(reload, 250);
+                    handler.removeCallbacks(reload);
+                    worker.execute(() -> failedReads = 0);
+                    handler.postDelayed(reload, 250);
                 }
             });
-            readPolicy();
+            handler.post(reload);
         } catch (Throwable error) { observing.set(false); log("Selection bridge: " + error); }
     }
 
-    private void readPolicy() {
-        if (context == null) return;
+    private void reloadSelection() {
+        if (!readPolicy()) {
+            // Retry startup races briefly. Opening the picker always signals another attempt.
+            long[] delays = {1000, 3000, 10000, 30000};
+            if (failedReads < delays.length) {
+                handler.removeCallbacks(reload);
+                handler.postDelayed(reload, delays[failedReads++]);
+            }
+            return;
+        }
+        failedReads = 0;
+        for (Manager state : managers) synchronized (state) { state.retryAfter = 0; }
+        publishAll(); rebuildApps.set(true);
+        try {
+            Class<?> finder = XposedHelpers.findClass(FINDER, loader);
+            Object instance = XposedHelpers.getStaticObjectField(finder, "INSTANCE");
+            XposedHelpers.callMethod(instance, "getAllWhiteApps", context, true);
+        } catch (Throwable error) { log("Refresh list: " + error); }
+    }
+
+    private boolean readPolicy() {
+        if (context == null) return false;
+        long identity = Binder.clearCallingIdentity();
         try (Cursor cursor = context.getContentResolver().query(SelectionStore.URI, null, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) policy = SelectionStore.decode(cursor.getString(0));
-        } catch (Throwable error) { log("Read selection: " + error); }
+            if (cursor != null && cursor.moveToFirst()) {
+                String value = cursor.getString(0);
+                policy = SelectionStore.decode(value);
+                cache.save(value);
+                log("Selection loaded included=" + policy.included.size() + " excluded=" + policy.excluded.size());
+                return true;
+            }
+            if (failedReads == 0) log("Selection provider unavailable; keeping the last selection");
+        } catch (Throwable error) { if (failedReads == 0) log("Read selection: " + error); }
+        finally { Binder.restoreCallingIdentity(identity); }
+        return false;
     }
 
     private ArrayList<String> publish(Manager state, boolean sourceCommitted) {
@@ -162,15 +195,24 @@ public final class CastUnlockHook implements IXposedHookLoadPackage {
             }
             ArrayList<String> next = new PublishedApps(policy.apply(state.original));
             XposedHelpers.setStaticObjectField(state.type, "sMirageAppList", next);
-            if (state.ready && MAIN.equals(state.type.getName()) && context != null && !state.original.equals(state.reported)) {
-                try {
-                    Bundle extras = new Bundle(); extras.putStringArrayList("packages", new ArrayList<>(state.original));
-                    context.getContentResolver().call(SelectionStore.URI, "baseline", null, extras);
-                    state.reported = state.original;
-                } catch (Throwable error) { log("Report list: " + error); }
+            if (state.ready && MAIN.equals(state.type.getName()) && context != null && !state.original.equals(state.reported)
+                    && (SystemClock.uptimeMillis() >= state.retryAfter || !state.original.equals(state.attempted))) {
+                List<String> original = state.original;
+                state.attempted = original;
+                state.retryAfter = SystemClock.uptimeMillis() + 30000;
+                worker.execute(() -> reportOriginal(state, original));
             }
             return next;
         }
+    }
+    private void reportOriginal(Manager state, List<String> original) {
+        long identity = Binder.clearCallingIdentity();
+        try {
+            Bundle extras = new Bundle(); extras.putStringArrayList("packages", new ArrayList<>(original));
+            context.getContentResolver().call(SelectionStore.URI, "baseline", null, extras);
+            synchronized (state) { state.reported = original; }
+        } catch (Throwable error) { log("Report list: " + error); }
+        finally { Binder.restoreCallingIdentity(identity); }
     }
     private void publishAll() {
         for (Manager state : managers) try {

@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    override fun onResume() { super.onResume(); model.load() }
+    override fun onResume() { super.onResume(); model.load(); SelectionStore(this).refreshBridge() }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
