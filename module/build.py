@@ -1,16 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Old_cucumber
 from pathlib import Path
-import subprocess, os, zipfile, urllib.request, hashlib, json
+import subprocess, os, zipfile, urllib.request, hashlib, json, shutil, re
+import xml.etree.ElementTree as ET
 
 PROJECT = Path(__file__).resolve().parent
 BASE = PROJECT.parent
 WORK = BASE / 'work/build'
 DIST = BASE / 'dist'
 DIST.mkdir(exist_ok=True)
-SDK = Path(os.environ.get('ANDROID_SDK_ROOT', Path(os.environ['LOCALAPPDATA']) / 'Android/Sdk'))
+if os.name != 'nt':
+    raise SystemExit('This build script requires Windows and Android SDK build-tools 36.0.0.')
+SDK = Path(os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME')
+           or str(Path(os.environ['LOCALAPPDATA']) / 'Android/Sdk'))
 TOOLS = SDK / 'build-tools/36.0.0'
 ANDROID = SDK / 'platforms/android-36/android.jar'
 API = WORK / 'deps/xposed-api-82.jar'
-OUTPUT = DIST / 'OPPO-Cast-Unlock-LSPosed-v1.0-Old_cucumber.apk'
+manifest_xml = ET.parse(PROJECT / 'AndroidManifest.xml').getroot()
+VERSION = manifest_xml.attrib['{http://schemas.android.com/apk/res/android}versionName']
+VERSION_CODE = int(manifest_xml.attrib['{http://schemas.android.com/apk/res/android}versionCode'])
+if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)*', VERSION):
+    raise SystemExit('Unexpected version name.')
+STEM = 'OPPO-Cast-Unlock-LSPosed-v' + VERSION
+OUTPUT = DIST / (STEM + '.apk')
 
 def run(args):
     p = subprocess.run([str(a) for a in args], capture_output=True, timeout=90)
@@ -20,9 +32,16 @@ def run(args):
     return output
 
 for d in ['deps', 'classes', 'dex']:
-    (WORK / d).mkdir(parents=True, exist_ok=True)
+    target = WORK / d
+    if d != 'deps' and target.exists():
+        # Only remove these two generated directories inside this project's build folder.
+        assert WORK.resolve().is_relative_to(BASE.resolve())
+        assert target.resolve().parent == WORK.resolve(), 'Unexpected build directory target'
+        shutil.rmtree(target)
+    target.mkdir(parents=True, exist_ok=True)
 if not API.exists():
-    urllib.request.urlretrieve('https://api.xposed.info/de/robv/android/xposed/api/82/api-82.jar', API)
+    with urllib.request.urlopen('https://api.xposed.info/de/robv/android/xposed/api/82/api-82.jar', timeout=30) as response:
+        API.write_bytes(response.read())
 assert hashlib.sha256(API.read_bytes()).hexdigest() == 'f48c635f1c7469fdec0e00ad2ea0b7a6b2f5b55065784a35b7ca3a84615e8e25'
 
 sources = sorted((PROJECT / 'src').rglob('*.java'))
@@ -65,20 +84,32 @@ with zipfile.ZipFile(OUTPUT) as z:
     assert z.read('assets/xposed_init').decode().strip() == 'com.oldcucumber.oppocastunlock.CastUnlockHook'
     assert 'classes.dex' in z.namelist()
     # Compile-only Xposed stubs must not become module classes.
-    dex = z.read('classes.dex')
-    # DEX type references may mention the API; definitions are verified from javac inputs.
     assert all('de/robv' not in f.relative_to(WORK / 'classes').as_posix()
                for f in (WORK / 'classes').rglob('*.class'))
 (WORK / 'apk-verification.txt').write_text(verify + '\n' + manifest, encoding='utf8')
 proof = {'package': 'com.oldcucumber.oppocastunlock', 'author': 'Old_cucumber',
-         'version': '1.0', 'no_activity': True, 'scope': ['com.oplus.linker'],
+         'version': VERSION, 'versionCode': VERSION_CODE,
+         'name': 'OPPO互联全应用投屏', 'no_activity': True, 'scope': ['com.oplus.linker'],
          'signature_verified': True, 'zipalign_verified': True,
          'apk_bytes': OUTPUT.stat().st_size,
          'sha256': hashlib.sha256(OUTPUT.read_bytes()).hexdigest(),
+         'certificate_sha256': re.search(r'certificate SHA-256 digest: ([0-9a-fA-F]+)', verify).group(1),
          'runtime_hook_tested': False, 'cast_tested': False}
-(DIST / 'OPPO-Cast-Unlock-LSPosed-build.json').write_text(json.dumps(proof, indent=2), encoding='utf8')
-with zipfile.ZipFile(DIST / 'OPPO-Cast-Unlock-LSPosed-source.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+proof_path = DIST / (STEM + '-build.json')
+proof_path.write_text(json.dumps(proof, ensure_ascii=False, indent=2), encoding='utf8')
+source_zip = DIST / (STEM + '-source.zip')
+with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_DEFLATED) as z:
     for f in sorted(PROJECT.rglob('*')):
-        if f.is_file(): z.write(f, f.relative_to(PROJECT).as_posix())
+        if f.is_file() and '__pycache__' not in f.parts:
+            z.write(f, 'module/' + f.relative_to(PROJECT).as_posix())
+    for name in ['LICENSE', 'README.md', 'THIRD_PARTY.md', '.gitignore', '.gitattributes']:
+        z.write(BASE / name, name)
+with zipfile.ZipFile(source_zip) as z:
+    assert z.testzip() is None
+    assert 'LICENSE' in z.namelist() and 'module/build.py' in z.namelist()
+    assert not any(n.endswith(('.jks', '.keystore', '.class', '.apk')) for n in z.namelist())
+artifacts = [OUTPUT, source_zip, proof_path]
+(DIST / (STEM + '-SHA256SUMS.txt')).write_text(''.join(
+    hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in artifacts), encoding='ascii')
 print(OUTPUT)
 print(json.dumps(proof, indent=2))

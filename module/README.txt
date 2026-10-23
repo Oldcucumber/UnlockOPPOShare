@@ -1,4 +1,4 @@
-OPPO互联全应用投屏 LSPosed 模块 v1.0
+OPPO互联全应用投屏 LSPosed 模块 v1.0.1
 作者：Old_cucumber
 包名：com.oldcucumber.oppocastunlock
 
@@ -12,3 +12,4 @@ OPPO互联全应用投屏 LSPosed 模块 v1.0
 
 本次只进行编译、APK 结构和签名校验、安装确认。未进行投屏或运行时 Hook 效果测试。
 Xposed API 82 仅作为编译依赖，不打包进 APK。
+许可证：GPL-3.0-only；完整协议位于仓库根目录 LICENSE。

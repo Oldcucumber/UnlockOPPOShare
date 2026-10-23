@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Old_cucumber
 package com.oldcucumber.oppocastunlock;
 
 import android.app.Application;

@@ -1,4 +1,5 @@
 work/
 dist/
 *.jks
+*.keystore
 __pycache__/
