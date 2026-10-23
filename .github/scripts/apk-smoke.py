@@ -21,13 +21,15 @@ for _ in range(12):
     xml = adb('shell', 'cat', '/sdcard/selection.xml')
     nodes = list(ET.fromstring(xml).iter('node'))
     texts = {node.get('text') for node in nodes}
-    if 'UnlockOPPOshare' in texts and '搜索应用' in texts and '个应用已显示' in texts:
+    (out / 'installed-page.xml').write_bytes(xml)
+    # Compose can merge a row's switch role and texts into one accessibility node.
+    loaded = any(PACKAGE in (text or '') for text in texts)
+    if loaded and 'UnlockOPPOshare' in texts and '搜索应用' in texts and '个应用已显示' in texts:
         assert '应用加载失败' not in texts
-        assert any(node.get('class') == 'android.widget.Switch' for node in nodes), 'No installed applications loaded'
         break
 else:
-    raise AssertionError('Packaged APK did not load the selection screen')
+    (out / 'installed-page.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+    raise AssertionError('Packaged APK did not load applications: ' + repr(sorted(texts)))
 assert adb('shell', 'pidof', PACKAGE).strip(), 'Packaged app exited'
-(out / 'installed-page.xml').write_bytes(xml)
 (out / 'installed-page.png').write_bytes(adb('exec-out', 'screencap', '-p'))
 print('Packaged APK launched and loaded installed applications')
