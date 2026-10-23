@@ -62,6 +62,7 @@ menu = ET.fromstring(snapshot())
 tap(next(n for n in menu.iter('node') if n.get('text') == '恢复默认'))
 time.sleep(1)
 reset = snapshot()
-assert all(n.get('checked') == 'false' for n, _ in app_rows(ET.fromstring(reset))), 'Reset retained extra applications'
+reset_rows = app_rows(ET.fromstring(reset))
+assert reset_rows and all(n.get('checked') == 'false' for n, _ in reset_rows), 'Reset did not restore the built-in selection'
 (out / 'installed-reset.png').write_bytes(adb('exec-out', 'screencap', '-p'))
 print('Packaged APK launched, toggled an application and restored the built-in list')
